@@ -4,6 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import Icon from '@/components/ui/icon';
 import { toast } from 'sonner';
 
@@ -29,6 +31,7 @@ interface Order {
   package: UCPackage;
   date: string;
   status: 'completed' | 'pending' | 'cancelled';
+  playerId?: string;
 }
 
 const initialOrders: Order[] = [
@@ -56,6 +59,7 @@ export default function Index() {
   });
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
+  const [playerId, setPlayerId] = useState('');
 
   useEffect(() => {
     localStorage.setItem('pubg-orders', JSON.stringify(orders));
@@ -67,13 +71,19 @@ export default function Index() {
   };
 
   const handlePayment = () => {
-    if (!selectedPackage) return;
+    if (!selectedPackage || !playerId.trim()) {
+      toast.error('Ошибка', {
+        description: 'Введите ваш игровой ID PUBG',
+      });
+      return;
+    }
     
     const newOrder: Order = {
       id: Date.now().toString(),
       package: selectedPackage,
       date: new Date().toISOString().split('T')[0],
       status: 'pending',
+      playerId: playerId.trim(),
     };
     
     setOrders(prev => [newOrder, ...prev]);
@@ -411,6 +421,25 @@ export default function Index() {
             </DialogHeader>
             {selectedPackage && (
               <div className="space-y-6">
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="playerId" className="text-base font-semibold">
+                      Игровой ID PUBG Mobile
+                    </Label>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Введите ваш ID из игры для зачисления UC
+                    </p>
+                    <Input
+                      id="playerId"
+                      type="text"
+                      placeholder="Например: 5123456789"
+                      value={playerId}
+                      onChange={(e) => setPlayerId(e.target.value)}
+                      className="text-lg h-12"
+                    />
+                  </div>
+                </div>
+
                 <div className="p-6 rounded-xl gradient-card border-2 border-primary/50">
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-muted-foreground">Количество UC:</span>
@@ -439,12 +468,16 @@ export default function Index() {
                     onClick={handlePayment}
                     className="w-full gradient-purple-blue hover:opacity-90 text-white font-semibold"
                     size="lg"
+                    disabled={!playerId.trim()}
                   >
                     <Icon name="CreditCard" size={20} className="mr-2" />
                     Перейти к оплате
                   </Button>
                   <Button
-                    onClick={() => setShowPaymentDialog(false)}
+                    onClick={() => {
+                      setShowPaymentDialog(false);
+                      setPlayerId('');
+                    }}
                     variant="outline"
                     className="w-full"
                   >
