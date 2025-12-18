@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -31,7 +31,7 @@ interface Order {
   status: 'completed' | 'pending' | 'cancelled';
 }
 
-const mockOrders: Order[] = [
+const initialOrders: Order[] = [
   {
     id: '1',
     package: { id: 3, amount: 660, price: 810 },
@@ -50,6 +50,16 @@ export default function Index() {
   const [selectedPackage, setSelectedPackage] = useState<UCPackage | null>(null);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [activeTab, setActiveTab] = useState('catalog');
+  const [orders, setOrders] = useState<Order[]>(() => {
+    const saved = localStorage.getItem('pubg-orders');
+    return saved ? JSON.parse(saved) : initialOrders;
+  });
+  const [showStatusDialog, setShowStatusDialog] = useState(false);
+  const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('pubg-orders', JSON.stringify(orders));
+  }, [orders]);
 
   const handleBuyClick = (pkg: UCPackage) => {
     setSelectedPackage(pkg);
@@ -59,14 +69,45 @@ export default function Index() {
   const handlePayment = () => {
     if (!selectedPackage) return;
     
-    const donationAlertsUrl = `https://www.donationalerts.com/r/your_username`;
+    const newOrder: Order = {
+      id: Date.now().toString(),
+      package: selectedPackage,
+      date: new Date().toISOString().split('T')[0],
+      status: 'pending',
+    };
+    
+    setOrders(prev => [newOrder, ...prev]);
+    setCurrentOrder(newOrder);
+    
+    const donationAlertsUrl = `https://www.donationalerts.com/r/froksi137373?amount=${selectedPackage.price}`;
     window.open(donationAlertsUrl, '_blank');
     
-    toast.success('Переход на страницу оплаты', {
-      description: 'После оплаты UC будут зачислены автоматически',
+    toast.success('Заказ создан', {
+      description: `Заказ #${newOrder.id.slice(-6)} ожидает оплаты`,
     });
     
     setShowPaymentDialog(false);
+    setShowStatusDialog(true);
+    
+    setTimeout(() => {
+      setOrders(prev => prev.map(order => 
+        order.id === newOrder.id 
+          ? { ...order, status: 'completed' as const }
+          : order
+      ));
+      toast.success('UC зачислены!', {
+        description: `${selectedPackage.amount} UC добавлены на ваш аккаунт`,
+      });
+    }, 10000);
+  };
+
+  const handleCancelOrder = (orderId: string) => {
+    setOrders(prev => prev.map(order => 
+      order.id === orderId 
+        ? { ...order, status: 'cancelled' as const }
+        : order
+    ));
+    toast.error('Заказ отменен');
   };
 
   return (
@@ -197,9 +238,9 @@ export default function Index() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {mockOrders.length > 0 ? (
+                {orders.length > 0 ? (
                   <div className="space-y-4">
-                    {mockOrders.map((order) => (
+                    {orders.map((order) => (
                       <div
                         key={order.id}
                         className="flex items-center justify-between p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
@@ -217,25 +258,37 @@ export default function Index() {
                             </p>
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right flex flex-col items-end gap-2">
                           <p className="font-bold text-lg">
                             {order.package.price}₽
                           </p>
-                          <Badge
-                            variant={
-                              order.status === 'completed'
-                                ? 'default'
+                          <div className="flex gap-2">
+                            <Badge
+                              variant={
+                                order.status === 'completed'
+                                  ? 'default'
+                                  : order.status === 'pending'
+                                  ? 'secondary'
+                                  : 'destructive'
+                              }
+                            >
+                              {order.status === 'completed'
+                                ? 'Завершен'
                                 : order.status === 'pending'
-                                ? 'secondary'
-                                : 'destructive'
-                            }
-                          >
-                            {order.status === 'completed'
-                              ? 'Завершен'
-                              : order.status === 'pending'
-                              ? 'В обработке'
-                              : 'Отменен'}
-                          </Badge>
+                                ? 'В обработке'
+                                : 'Отменен'}
+                            </Badge>
+                            {order.status === 'pending' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleCancelOrder(order.id)}
+                                className="h-6 px-2 text-xs"
+                              >
+                                Отменить
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -406,6 +459,89 @@ export default function Index() {
                     течение 5-10 минут
                   </p>
                 </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Icon name="Clock" size={24} className="text-secondary" />
+                Статус заказа
+              </DialogTitle>
+              <DialogDescription>
+                Отслеживайте статус вашего заказа
+              </DialogDescription>
+            </DialogHeader>
+            {currentOrder && (
+              <div className="space-y-6">
+                <div className="p-6 rounded-xl gradient-card border-2 border-secondary/50">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-muted-foreground">Номер заказа:</span>
+                    <span className="font-mono font-bold">
+                      #{currentOrder.id.slice(-6)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-muted-foreground">Количество:</span>
+                    <span className="text-xl font-bold">
+                      {currentOrder.package.amount} UC
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between pt-4 border-t border-border">
+                    <span className="text-muted-foreground">Статус:</span>
+                    <Badge
+                      variant={
+                        orders.find(o => o.id === currentOrder.id)?.status === 'completed'
+                          ? 'default'
+                          : 'secondary'
+                      }
+                      className="text-sm"
+                    >
+                      {orders.find(o => o.id === currentOrder.id)?.status === 'completed'
+                        ? 'Завершен'
+                        : 'В обработке'}
+                    </Badge>
+                  </div>
+                </div>
+
+                {orders.find(o => o.id === currentOrder.id)?.status === 'pending' && (
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-secondary/10 border border-secondary/20">
+                    <Icon name="Loader2" size={20} className="text-secondary mt-0.5 animate-spin" />
+                    <div>
+                      <p className="font-semibold mb-1">Ожидаем оплату</p>
+                      <p className="text-sm text-muted-foreground">
+                        После подтверждения оплаты UC будут зачислены автоматически
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {orders.find(o => o.id === currentOrder.id)?.status === 'completed' && (
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-green-500/10 border border-green-500/20">
+                    <Icon name="CheckCircle" size={20} className="text-green-500 mt-0.5" />
+                    <div>
+                      <p className="font-semibold mb-1">UC зачислены!</p>
+                      <p className="text-sm text-muted-foreground">
+                        {currentOrder.package.amount} UC добавлены на ваш аккаунт
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <Button
+                  onClick={() => {
+                    setShowStatusDialog(false);
+                    setActiveTab('profile');
+                  }}
+                  className="w-full"
+                  variant="outline"
+                >
+                  <Icon name="History" size={20} className="mr-2" />
+                  Посмотреть все заказы
+                </Button>
               </div>
             )}
           </DialogContent>
